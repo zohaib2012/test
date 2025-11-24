@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { StorefrontHeader } from "@/components/StorefrontHeader";
 import { ProductCard } from "@/components/ProductCard";
 import { Button } from "@/components/ui/button";
@@ -13,78 +13,65 @@ import {
 import { Slider } from "@/components/ui/slider";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
 import { SlidersHorizontal } from "lucide-react";
-import headphonesImage from "@assets/generated_images/premium_headphones_product_image.png";
-import laptopImage from "@assets/generated_images/gaming_laptop_product_image.png";
-import bagImage from "@assets/generated_images/leather_bag_product_image.png";
-import phoneImage from "@assets/generated_images/smartphone_product_image.png";
-import sneakersImage from "@assets/generated_images/sneakers_product_image.png";
+import { useQuery } from "@tanstack/react-query";
+import type { Product, Category } from "@shared/schema";
 
 export default function ShopPage() {
   const [priceRange, setPriceRange] = useState([0, 2000]);
   const [showFilters, setShowFilters] = useState(true);
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortBy, setSortBy] = useState("featured");
 
-  // todo: remove mock functionality - mock data
-  const products = [
-    {
-      id: "1",
-      name: "Premium Wireless Headphones",
-      price: 299.99,
-      originalPrice: 399.99,
-      image: headphonesImage,
-      rating: 4.5,
-      reviewCount: 128,
-      onSale: true,
-    },
-    {
-      id: "2",
-      name: "Gaming Laptop Pro",
-      price: 1299.99,
-      image: laptopImage,
-      rating: 4.8,
-      reviewCount: 89,
-    },
-    {
-      id: "3",
-      name: "Luxury Leather Bag",
-      price: 199.99,
-      image: bagImage,
-      rating: 4.6,
-      reviewCount: 156,
-    },
-    {
-      id: "4",
-      name: "Smartphone X Pro",
-      price: 999.99,
-      image: phoneImage,
-      rating: 4.9,
-      reviewCount: 234,
-    },
-    {
-      id: "5",
-      name: "Designer Sneakers",
-      price: 159.99,
-      image: sneakersImage,
-      rating: 4.4,
-      reviewCount: 92,
-    },
-    {
-      id: "6",
-      name: "Wireless Earbuds Pro",
-      price: 179.99,
-      image: headphonesImage,
-      rating: 4.7,
-      reviewCount: 203,
-    },
-  ];
+  const { data: allProducts, isLoading: productsLoading } = useQuery<Product[]>({
+    queryKey: ["/api/products"],
+  });
 
-  const categories = [
-    "Electronics",
-    "Fashion",
-    "Accessories",
-    "Footwear",
-    "Home & Living",
-  ];
+  const { data: categories, isLoading: categoriesLoading } = useQuery<Category[]>({
+    queryKey: ["/api/categories"],
+  });
+
+  const filteredProducts = useMemo(() => {
+    if (!allProducts) return [];
+    
+    return allProducts.filter((product) => {
+      const price = parseFloat(product.price);
+      const matchesPrice = price >= priceRange[0] && price <= priceRange[1];
+      const matchesCategory = selectedCategories.length === 0 || selectedCategories.includes(product.categoryId);
+      const matchesSearch = !searchQuery || product.name.toLowerCase().includes(searchQuery.toLowerCase());
+      
+      return matchesPrice && matchesCategory && matchesSearch;
+    }).sort((a, b) => {
+      switch (sortBy) {
+        case "price-asc":
+          return parseFloat(a.price) - parseFloat(b.price);
+        case "price-desc":
+          return parseFloat(b.price) - parseFloat(a.price);
+        case "rating":
+          return parseFloat(b.rating) - parseFloat(a.rating);
+        case "newest":
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        default:
+          return 0;
+      }
+    });
+  }, [allProducts, priceRange, selectedCategories, searchQuery, sortBy]);
+
+  const toggleCategory = (categoryId: string) => {
+    setSelectedCategories((prev) =>
+      prev.includes(categoryId)
+        ? prev.filter((id) => id !== categoryId)
+        : [...prev, categoryId]
+    );
+  };
+
+  const clearFilters = () => {
+    setSelectedCategories([]);
+    setPriceRange([0, 2000]);
+    setSearchQuery("");
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -98,7 +85,7 @@ export default function ShopPage() {
               All Products
             </h1>
             <p className="text-muted-foreground">
-              Showing {products.length} products
+              Showing {filteredProducts.length} products
             </p>
           </div>
           <div className="flex items-center gap-4">
@@ -110,7 +97,7 @@ export default function ShopPage() {
               <SlidersHorizontal className="h-4 w-4 mr-2" />
               Filters
             </Button>
-            <Select defaultValue="featured">
+            <Select value={sortBy} onValueChange={setSortBy}>
               <SelectTrigger className="w-[180px]" data-testid="select-sort">
                 <SelectValue placeholder="Sort by" />
               </SelectTrigger>
@@ -135,6 +122,8 @@ export default function ShopPage() {
                 <Input
                   type="search"
                   placeholder="Search products..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
                   data-testid="input-product-search"
                 />
               </div>
@@ -143,20 +132,28 @@ export default function ShopPage() {
               <div>
                 <Label className="mb-3 block font-semibold">Categories</Label>
                 <div className="space-y-2">
-                  {categories.map((category) => (
-                    <div key={category} className="flex items-center gap-2">
-                      <Checkbox
-                        id={category}
-                        data-testid={`checkbox-category-${category.toLowerCase()}`}
-                      />
-                      <Label
-                        htmlFor={category}
-                        className="cursor-pointer font-normal"
-                      >
-                        {category}
-                      </Label>
-                    </div>
-                  ))}
+                  {categoriesLoading ? (
+                    Array.from({ length: 3 }).map((_, i) => (
+                      <Skeleton key={i} className="h-5 w-full" />
+                    ))
+                  ) : (
+                    categories?.map((category) => (
+                      <div key={category.id} className="flex items-center gap-2">
+                        <Checkbox
+                          id={category.id}
+                          checked={selectedCategories.includes(category.id)}
+                          onCheckedChange={() => toggleCategory(category.id)}
+                          data-testid={`checkbox-category-${category.name.toLowerCase()}`}
+                        />
+                        <Label
+                          htmlFor={category.id}
+                          className="cursor-pointer font-normal"
+                        >
+                          {category.name}
+                        </Label>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
 
@@ -201,6 +198,7 @@ export default function ShopPage() {
               <Button
                 variant="outline"
                 className="w-full"
+                onClick={clearFilters}
                 data-testid="button-clear-filters"
               >
                 Clear Filters
@@ -211,9 +209,33 @@ export default function ShopPage() {
           {/* Products Grid */}
           <div className="flex-1">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {products.map((product) => (
-                <ProductCard key={product.id} {...product} />
-              ))}
+              {productsLoading ? (
+                Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} className="space-y-3">
+                    <Skeleton className="h-64 w-full rounded-lg" />
+                    <Skeleton className="h-4 w-3/4" />
+                    <Skeleton className="h-4 w-1/2" />
+                  </div>
+                ))
+              ) : filteredProducts.length === 0 ? (
+                <div className="col-span-full text-center py-12">
+                  <p className="text-muted-foreground text-lg">No products found matching your filters.</p>
+                </div>
+              ) : (
+                filteredProducts.map((product) => (
+                  <ProductCard
+                    key={product.id}
+                    id={product.id}
+                    name={product.name}
+                    price={parseFloat(product.price)}
+                    originalPrice={product.originalPrice ? parseFloat(product.originalPrice) : undefined}
+                    image={product.image}
+                    rating={parseFloat(product.rating)}
+                    reviewCount={product.reviewCount}
+                    onSale={!!product.originalPrice}
+                  />
+                ))
+              )}
             </div>
 
             {/* Pagination */}

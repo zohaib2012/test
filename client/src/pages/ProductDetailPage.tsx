@@ -3,177 +3,141 @@ import { StorefrontHeader } from "@/components/StorefrontHeader";
 import { ProductCard } from "@/components/ProductCard";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Star, ShoppingCart, Heart, Minus, Plus } from "lucide-react";
-import headphonesImage from "@assets/generated_images/premium_headphones_product_image.png";
-import laptopImage from "@assets/generated_images/gaming_laptop_product_image.png";
-import bagImage from "@assets/generated_images/leather_bag_product_image.png";
+import { useQuery } from "@tanstack/react-query";
+import { useRoute } from "wouter";
+import { useCart } from "@/lib/cart";
+import { useToast } from "@/hooks/use-toast";
+import type { Product } from "@shared/schema";
 
 export default function ProductDetailPage() {
+  const [, params] = useRoute("/product/:id");
+  const productId = params?.id;
   const [quantity, setQuantity] = useState(1);
-  const [selectedSize, setSelectedSize] = useState("M");
-  const [selectedColor, setSelectedColor] = useState("Black");
+  const { addItem } = useCart();
+  const { toast } = useToast();
 
-  // todo: remove mock functionality - mock data
-  const product = {
-    id: "1",
-    name: "Premium Wireless Headphones",
-    price: 299.99,
-    originalPrice: 399.99,
-    rating: 4.5,
-    reviewCount: 128,
-    inStock: true,
-    images: [headphonesImage, laptopImage, bagImage],
+  const { data: product, isLoading: productLoading } = useQuery<Product>({
+    queryKey: ["/api/products", productId],
+    enabled: !!productId,
+  });
+
+  const { data: allProducts } = useQuery<Product[]>({
+    queryKey: ["/api/products"],
+  });
+
+  const relatedProducts = allProducts
+    ?.filter((p) => p.id !== productId && p.categoryId === product?.categoryId)
+    .slice(0, 4) || [];
+
+  const handleAddToCart = () => {
+    if (!product) return;
+    
+    addItem({
+      id: product.id,
+      name: product.name,
+      price: parseFloat(product.price),
+      image: product.image,
+    }, quantity);
+
+    toast({
+      title: "Added to cart",
+      description: `${quantity} ${quantity === 1 ? 'item' : 'items'} added to your cart`,
+    });
   };
-
-  const relatedProducts = [
-    {
-      id: "2",
-      name: "Gaming Laptop Pro",
-      price: 1299.99,
-      image: laptopImage,
-      rating: 4.8,
-      reviewCount: 89,
-    },
-    {
-      id: "3",
-      name: "Luxury Leather Bag",
-      price: 199.99,
-      image: bagImage,
-      rating: 4.6,
-      reviewCount: 156,
-    },
-  ];
-
-  const sizes = ["S", "M", "L", "XL"];
-  const colors = ["Black", "White", "Red", "Blue"];
 
   return (
     <div className="min-h-screen bg-background">
       <StorefrontHeader />
 
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
-        {/* Breadcrumb */}
-        <nav className="flex items-center gap-2 text-sm text-muted-foreground mb-8">
-          <span>Home</span>
-          <span>/</span>
-          <span>Electronics</span>
-          <span>/</span>
-          <span className="text-foreground">Headphones</span>
-        </nav>
-
-        <div className="grid md:grid-cols-2 gap-12 mb-16">
-          {/* Image Gallery */}
-          <div className="space-y-4">
-            <div className="aspect-square rounded-lg overflow-hidden bg-muted">
-              <img
-                src={product.images[0]}
-                alt={product.name}
-                className="w-full h-full object-cover"
-                data-testid="img-product-main"
-              />
+        {productLoading ? (
+          <div className="grid md:grid-cols-2 gap-12 mb-16">
+            <div className="space-y-4">
+              <Skeleton className="aspect-square w-full rounded-lg" />
+              <div className="grid grid-cols-3 gap-4">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <Skeleton key={i} className="aspect-square w-full rounded-lg" />
+                ))}
+              </div>
             </div>
-            <div className="grid grid-cols-3 gap-4">
-              {product.images.map((image, index) => (
-                <button
-                  key={index}
-                  className="aspect-square rounded-lg overflow-hidden bg-muted border-2 border-transparent hover:border-primary transition-colors"
-                  data-testid={`button-thumbnail-${index}`}
-                >
-                  <img
-                    src={image}
-                    alt={`${product.name} ${index + 1}`}
-                    className="w-full h-full object-cover"
-                  />
-                </button>
-              ))}
+            <div className="space-y-6">
+              <Skeleton className="h-8 w-32" />
+              <Skeleton className="h-12 w-3/4" />
+              <Skeleton className="h-6 w-48" />
+              <Skeleton className="h-16 w-full" />
+              <Skeleton className="h-24 w-full" />
             </div>
           </div>
-
-          {/* Product Info */}
-          <div className="space-y-6">
-            <div>
-              <Badge className="mb-4">In Stock</Badge>
-              <h1
-                className="text-3xl md:text-4xl font-bold mb-4"
-                data-testid="text-product-name"
-              >
-                {product.name}
-              </h1>
-              <div className="flex items-center gap-2 mb-4">
-                <div className="flex items-center gap-1">
-                  {Array.from({ length: 5 }).map((_, i) => (
-                    <Star
-                      key={i}
-                      className={`h-5 w-5 ${
-                        i < Math.floor(product.rating)
-                          ? "fill-primary text-primary"
-                          : "text-muted"
-                      }`}
-                    />
-                  ))}
+        ) : !product ? (
+          <div className="text-center py-12">
+            <p className="text-xl text-muted-foreground">Product not found</p>
+          </div>
+        ) : (
+          <>
+            <div className="grid md:grid-cols-2 gap-12 mb-16">
+              {/* Image Gallery */}
+              <div className="space-y-4">
+                <div className="aspect-square rounded-lg overflow-hidden bg-muted">
+                  <img
+                    src={product.image}
+                    alt={product.name}
+                    className="w-full h-full object-cover"
+                    data-testid="img-product-main"
+                  />
                 </div>
-                <span
-                  className="text-muted-foreground"
-                  data-testid="text-reviews"
-                >
-                  ({product.reviewCount} reviews)
-                </span>
               </div>
-              <div className="flex items-center gap-4 mb-6">
-                <span
-                  className="text-4xl font-bold"
-                  data-testid="text-product-price"
-                >
-                  ${product.price.toFixed(2)}
-                </span>
-                {product.originalPrice && (
-                  <span className="text-2xl text-muted-foreground line-through">
-                    ${product.originalPrice.toFixed(2)}
-                  </span>
-                )}
-              </div>
-            </div>
 
-            <p className="text-muted-foreground">
-              Experience premium sound quality with our wireless headphones.
-              Featuring active noise cancellation, 30-hour battery life, and
-              premium materials for ultimate comfort.
-            </p>
-
-            {/* Size Selector */}
-            <div>
-              <Label className="mb-3 block font-semibold">Size</Label>
-              <div className="flex gap-2">
-                {sizes.map((size) => (
-                  <Button
-                    key={size}
-                    variant={selectedSize === size ? "default" : "outline"}
-                    onClick={() => setSelectedSize(size)}
-                    data-testid={`button-size-${size}`}
+              {/* Product Info */}
+              <div className="space-y-6">
+                <div>
+                  <Badge className="mb-4">{product.stock > 0 ? 'In Stock' : 'Out of Stock'}</Badge>
+                  <h1
+                    className="text-3xl md:text-4xl font-bold mb-4"
+                    data-testid="text-product-name"
                   >
-                    {size}
-                  </Button>
-                ))}
-              </div>
-            </div>
+                    {product.name}
+                  </h1>
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="flex items-center gap-1">
+                      {Array.from({ length: 5 }).map((_, i) => (
+                        <Star
+                          key={i}
+                          className={`h-5 w-5 ${
+                            i < Math.floor(parseFloat(product.rating))
+                              ? "fill-primary text-primary"
+                              : "text-muted"
+                          }`}
+                        />
+                      ))}
+                    </div>
+                    <span
+                      className="text-muted-foreground"
+                      data-testid="text-reviews"
+                    >
+                      ({product.reviewCount} reviews)
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-4 mb-6">
+                    <span
+                      className="text-4xl font-bold"
+                      data-testid="text-product-price"
+                    >
+                      ${parseFloat(product.price).toFixed(2)}
+                    </span>
+                    {product.originalPrice && (
+                      <span className="text-2xl text-muted-foreground line-through">
+                        ${parseFloat(product.originalPrice).toFixed(2)}
+                      </span>
+                    )}
+                  </div>
+                </div>
 
-            {/* Color Selector */}
-            <div>
-              <Label className="mb-3 block font-semibold">Color</Label>
-              <div className="flex gap-2">
-                {colors.map((color) => (
-                  <Button
-                    key={color}
-                    variant={selectedColor === color ? "default" : "outline"}
-                    onClick={() => setSelectedColor(color)}
-                    data-testid={`button-color-${color}`}
-                  >
-                    {color}
-                  </Button>
-                ))}
-              </div>
-            </div>
+                <p className="text-muted-foreground">
+                  {product.description}
+                </p>
 
             {/* Quantity */}
             <div>
@@ -206,38 +170,40 @@ export default function ProductDetailPage() {
               </div>
             </div>
 
-            {/* Actions */}
-            <div className="flex gap-4">
-              <Button
-                size="lg"
-                className="flex-1"
-                data-testid="button-add-to-cart"
-              >
-                <ShoppingCart className="mr-2 h-5 w-5" />
-                Add to Cart
-              </Button>
-              <Button
-                size="lg"
-                variant="outline"
-                data-testid="button-add-to-wishlist"
-              >
-                <Heart className="h-5 w-5" />
-              </Button>
+                {/* Actions */}
+                <div className="flex gap-4">
+                  <Button
+                    size="lg"
+                    className="flex-1"
+                    onClick={handleAddToCart}
+                    disabled={product.stock === 0}
+                    data-testid="button-add-to-cart"
+                  >
+                    <ShoppingCart className="mr-2 h-5 w-5" />
+                    Add to Cart
+                  </Button>
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    data-testid="button-add-to-wishlist"
+                  >
+                    <Heart className="h-5 w-5" />
+                  </Button>
+                </div>
+
+                <Button
+                  size="lg"
+                  variant="secondary"
+                  className="w-full"
+                  data-testid="button-buy-now"
+                >
+                  Buy Now
+                </Button>
+              </div>
             </div>
 
-            <Button
-              size="lg"
-              variant="secondary"
-              className="w-full"
-              data-testid="button-buy-now"
-            >
-              Buy Now
-            </Button>
-          </div>
-        </div>
-
-        {/* Product Details Tabs */}
-        <Tabs defaultValue="description" className="mb-16">
+            {/* Product Details Tabs */}
+            <Tabs defaultValue="description" className="mb-16">
           <TabsList className="w-full justify-start">
             <TabsTrigger value="description" data-testid="tab-description">
               Description
@@ -313,19 +279,31 @@ export default function ProductDetailPage() {
               ))}
             </div>
           </TabsContent>
-        </Tabs>
+            </Tabs>
 
-        {/* Related Products */}
-        <section>
-          <h2 className="text-2xl md:text-3xl font-bold mb-6" data-testid="text-related-title">
-            Related Products
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {relatedProducts.map((product) => (
-              <ProductCard key={product.id} {...product} />
-            ))}
-          </div>
-        </section>
+            {/* Related Products */}
+            <section>
+              <h2 className="text-2xl md:text-3xl font-bold mb-6" data-testid="text-related-title">
+                Related Products
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                {relatedProducts.map((relatedProduct) => (
+                  <ProductCard
+                    key={relatedProduct.id}
+                    id={relatedProduct.id}
+                    name={relatedProduct.name}
+                    price={parseFloat(relatedProduct.price)}
+                    originalPrice={relatedProduct.originalPrice ? parseFloat(relatedProduct.originalPrice) : undefined}
+                    image={relatedProduct.image}
+                    rating={parseFloat(relatedProduct.rating)}
+                    reviewCount={relatedProduct.reviewCount}
+                    onSale={!!relatedProduct.originalPrice}
+                  />
+                ))}
+              </div>
+            </section>
+          </>
+        )}
       </div>
     </div>
   );

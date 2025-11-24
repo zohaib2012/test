@@ -4,6 +4,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -19,8 +20,14 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import {
   Select,
   SelectContent,
@@ -28,44 +35,186 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Textarea } from "@/components/ui/textarea";
 import { Search, Plus, Edit, Trash2 } from "lucide-react";
-import headphonesImage from "@assets/generated_images/premium_headphones_product_image.png";
-import laptopImage from "@assets/generated_images/gaming_laptop_product_image.png";
-import bagImage from "@assets/generated_images/leather_bag_product_image.png";
+import { useAuth } from "@/lib/auth";
+import { Redirect } from "wouter";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { insertProductSchema } from "@shared/schema";
+import { z } from "zod";
+
+const productFormSchema = insertProductSchema.extend({
+  price: z.coerce.number().min(0.01, "Price must be greater than 0"),
+  stock: z.coerce.number().int().min(0, "Stock must be at least 0"),
+});
+
+type ProductFormData = z.infer<typeof productFormSchema>;
 
 export default function ProductManagement() {
+  const { isAuthenticated, isAdmin, isLoading: authLoading } = useAuth();
+  const { toast } = useToast();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<any>(null);
+  const [deletingProduct, setDeletingProduct] = useState<any>(null);
 
-  // todo: remove mock functionality - mock data
-  const products = [
-    {
-      id: "1",
-      name: "Premium Wireless Headphones",
-      category: "Electronics",
-      price: 299.99,
-      stock: 45,
-      status: "Active",
-      image: headphonesImage,
+  const { data: products, isLoading: productsLoading } = useQuery({
+    queryKey: ["/api/products"],
+    enabled: isAuthenticated && isAdmin,
+  });
+
+  const { data: categories, isLoading: categoriesLoading } = useQuery({
+    queryKey: ["/api/categories"],
+    enabled: isAuthenticated && isAdmin,
+  });
+
+  const form = useForm<ProductFormData>({
+    resolver: zodResolver(productFormSchema),
+    defaultValues: {
+      name: "",
+      description: "",
+      price: 0,
+      image: "",
+      categoryId: "",
+      stock: 0,
+      status: "active",
     },
-    {
-      id: "2",
-      name: "Gaming Laptop Pro",
-      category: "Electronics",
-      price: 1299.99,
-      stock: 12,
-      status: "Active",
-      image: laptopImage,
+  });
+
+  const createMutation = useMutation({
+    mutationFn: async (data: ProductFormData) => {
+      const res = await apiRequest("POST", "/api/products", data);
+      return res.json();
     },
-    {
-      id: "3",
-      name: "Luxury Leather Bag",
-      category: "Fashion",
-      price: 199.99,
-      stock: 28,
-      status: "Active",
-      image: bagImage,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      toast({
+        title: "Success",
+        description: "Product created successfully",
+      });
+      setIsDialogOpen(false);
+      form.reset();
     },
-  ];
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: ProductFormData }) => {
+      const res = await apiRequest("PATCH", `/api/products/${id}`, data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      toast({
+        title: "Success",
+        description: "Product updated successfully",
+      });
+      setIsDialogOpen(false);
+      setEditingProduct(null);
+      form.reset();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/products/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      toast({
+        title: "Success",
+        description: "Product deleted successfully",
+      });
+      setDeletingProduct(null);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  if (authLoading) {
+    return (
+      <AdminLayout>
+        <div className="space-y-6">
+          <Skeleton className="h-12 w-64" />
+          <Skeleton className="h-32" />
+          <Skeleton className="h-96" />
+        </div>
+      </AdminLayout>
+    );
+  }
+
+  if (!isAuthenticated || !isAdmin) {
+    return <Redirect to="/login" />;
+  }
+
+  const handleSubmit = (data: ProductFormData) => {
+    if (editingProduct) {
+      updateMutation.mutate({ id: editingProduct.id, data });
+    } else {
+      createMutation.mutate(data);
+    }
+  };
+
+  const handleEdit = (product: any) => {
+    setEditingProduct(product);
+    form.reset({
+      name: product.name,
+      description: product.description,
+      price: parseFloat(product.price),
+      image: product.image,
+      categoryId: product.categoryId,
+      stock: product.stock,
+      status: product.status,
+    });
+    setIsDialogOpen(true);
+  };
+
+  const handleAddNew = () => {
+    setEditingProduct(null);
+    form.reset({
+      name: "",
+      description: "",
+      price: 0,
+      image: "",
+      categoryId: "",
+      stock: 0,
+      status: "active",
+    });
+    setIsDialogOpen(true);
+  };
+
+  const isLoading = productsLoading || categoriesLoading;
 
   return (
     <AdminLayout>
@@ -81,97 +230,189 @@ export default function ProductManagement() {
           </div>
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
-              <Button data-testid="button-add-product">
+              <Button data-testid="button-add-product" onClick={handleAddNew}>
                 <Plus className="h-4 w-4 mr-2" />
                 Add Product
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
-                <DialogTitle>Add New Product</DialogTitle>
+                <DialogTitle>
+                  {editingProduct ? "Edit Product" : "Add New Product"}
+                </DialogTitle>
               </DialogHeader>
-              <div className="space-y-4 py-4">
-                <div>
-                  <Label htmlFor="productName">Product Name</Label>
-                  <Input
-                    id="productName"
-                    placeholder="Enter product name"
-                    data-testid="input-product-name"
+              <Form {...form}>
+                <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4 py-4">
+                  <FormField
+                    control={form.control}
+                    name="name"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Product Name</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="Enter product name"
+                            data-testid="input-product-name"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
                   />
-                </div>
-                <div>
-                  <Label htmlFor="productDescription">Description</Label>
-                  <Textarea
-                    id="productDescription"
-                    placeholder="Enter product description"
-                    rows={4}
-                    data-testid="textarea-product-description"
+
+                  <FormField
+                    control={form.control}
+                    name="description"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Description</FormLabel>
+                        <FormControl>
+                          <Textarea
+                            placeholder="Enter product description"
+                            rows={4}
+                            data-testid="textarea-product-description"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
                   />
-                </div>
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="productCategory">Category</Label>
-                    <Select>
-                      <SelectTrigger data-testid="select-product-category">
-                        <SelectValue placeholder="Select category" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="electronics">Electronics</SelectItem>
-                        <SelectItem value="fashion">Fashion</SelectItem>
-                        <SelectItem value="accessories">Accessories</SelectItem>
-                        <SelectItem value="footwear">Footwear</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label htmlFor="productPrice">Price</Label>
-                    <Input
-                      id="productPrice"
-                      type="number"
-                      placeholder="0.00"
-                      data-testid="input-product-price"
+
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="categoryId"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Category</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value}>
+                            <FormControl>
+                              <SelectTrigger data-testid="select-product-category">
+                                <SelectValue placeholder="Select category" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {categories?.map((category: any) => (
+                                <SelectItem key={category.id} value={category.id}>
+                                  {category.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="price"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Price</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              placeholder="0.00"
+                              data-testid="input-product-price"
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
                     />
                   </div>
-                </div>
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="productStock">Stock</Label>
-                    <Input
-                      id="productStock"
-                      type="number"
-                      placeholder="0"
-                      data-testid="input-product-stock"
+
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="stock"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Stock</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              placeholder="0"
+                              data-testid="input-product-stock"
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="status"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Status</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value}>
+                            <FormControl>
+                              <SelectTrigger data-testid="select-product-status">
+                                <SelectValue placeholder="Select status" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="active">Active</SelectItem>
+                              <SelectItem value="inactive">Inactive</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
                     />
                   </div>
-                  <div>
-                    <Label htmlFor="productStatus">Status</Label>
-                    <Select>
-                      <SelectTrigger data-testid="select-product-status">
-                        <SelectValue placeholder="Select status" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="active">Active</SelectItem>
-                        <SelectItem value="inactive">Inactive</SelectItem>
-                      </SelectContent>
-                    </Select>
+
+                  <FormField
+                    control={form.control}
+                    name="image"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Image URL</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="Enter image URL"
+                            data-testid="input-product-image"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <div className="flex gap-4 pt-4">
+                    <Button
+                      type="submit"
+                      data-testid="button-save-product"
+                      disabled={createMutation.isPending || updateMutation.isPending}
+                    >
+                      {createMutation.isPending || updateMutation.isPending
+                        ? "Saving..."
+                        : "Save Product"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setIsDialogOpen(false);
+                        setEditingProduct(null);
+                        form.reset();
+                      }}
+                      data-testid="button-cancel-product"
+                    >
+                      Cancel
+                    </Button>
                   </div>
-                </div>
-                <div className="flex gap-4 pt-4">
-                  <Button
-                    onClick={() => setIsDialogOpen(false)}
-                    data-testid="button-save-product"
-                  >
-                    Save Product
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => setIsDialogOpen(false)}
-                    data-testid="button-cancel-product"
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              </div>
+                </form>
+              </Form>
             </DialogContent>
           </Dialog>
         </div>
@@ -195,10 +436,11 @@ export default function ProductManagement() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Categories</SelectItem>
-                <SelectItem value="electronics">Electronics</SelectItem>
-                <SelectItem value="fashion">Fashion</SelectItem>
-                <SelectItem value="accessories">Accessories</SelectItem>
-                <SelectItem value="footwear">Footwear</SelectItem>
+                {categories?.map((category: any) => (
+                  <SelectItem key={category.id} value={category.id}>
+                    {category.name}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -207,75 +449,111 @@ export default function ProductManagement() {
         {/* Products Table */}
         <Card>
           <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Product</TableHead>
-                  <TableHead>Category</TableHead>
-                  <TableHead>Price</TableHead>
-                  <TableHead>Stock</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {products.map((product) => (
-                  <TableRow key={product.id}>
-                    <TableCell>
-                      <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 rounded-lg overflow-hidden bg-muted flex-shrink-0">
-                          <img
-                            src={product.image}
-                            alt={product.name}
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                        <div className="font-medium" data-testid={`text-product-name-${product.id}`}>
-                          {product.name}
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell data-testid={`text-product-category-${product.id}`}>
-                      {product.category}
-                    </TableCell>
-                    <TableCell className="font-semibold" data-testid={`text-product-price-${product.id}`}>
-                      ${product.price.toFixed(2)}
-                    </TableCell>
-                    <TableCell data-testid={`text-product-stock-${product.id}`}>
-                      {product.stock}
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant="secondary"
-                        data-testid={`badge-product-status-${product.id}`}
-                      >
-                        {product.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          data-testid={`button-edit-product-${product.id}`}
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          data-testid={`button-delete-product-${product.id}`}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
+            {isLoading ? (
+              <div className="p-6 space-y-4">
+                {[1, 2, 3].map((i) => (
+                  <Skeleton key={i} className="h-16" />
                 ))}
-              </TableBody>
-            </Table>
+              </div>
+            ) : !products || products.length === 0 ? (
+              <div className="p-12 text-center text-muted-foreground">
+                <Package className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p>No products found</p>
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Product</TableHead>
+                    <TableHead>Category</TableHead>
+                    <TableHead>Price</TableHead>
+                    <TableHead>Stock</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {products.map((product: any) => (
+                    <TableRow key={product.id}>
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <div className="w-12 h-12 rounded-lg overflow-hidden bg-muted flex-shrink-0">
+                            <img
+                              src={product.image}
+                              alt={product.name}
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                          <div className="font-medium" data-testid={`text-product-name-${product.id}`}>
+                            {product.name}
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell data-testid={`text-product-category-${product.id}`}>
+                        {categories?.find((c: any) => c.id === product.categoryId)?.name || 'N/A'}
+                      </TableCell>
+                      <TableCell className="font-semibold" data-testid={`text-product-price-${product.id}`}>
+                        ${parseFloat(product.price).toFixed(2)}
+                      </TableCell>
+                      <TableCell data-testid={`text-product-stock-${product.id}`}>
+                        {product.stock}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant="secondary"
+                          data-testid={`badge-product-status-${product.id}`}
+                        >
+                          {product.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleEdit(product)}
+                            data-testid={`button-edit-product-${product.id}`}
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setDeletingProduct(product)}
+                            data-testid={`button-delete-product-${product.id}`}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
           </div>
         </Card>
+
+        {/* Delete Confirmation Dialog */}
+        <AlertDialog open={!!deletingProduct} onOpenChange={() => setDeletingProduct(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will permanently delete "{deletingProduct?.name}". This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => deletingProduct && deleteMutation.mutate(deletingProduct.id)}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                {deleteMutation.isPending ? "Deleting..." : "Delete"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </AdminLayout>
   );

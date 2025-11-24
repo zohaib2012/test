@@ -4,6 +4,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -19,69 +20,85 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Search, Eye, Download } from "lucide-react";
+import { useAuth } from "@/lib/auth";
+import { Redirect } from "wouter";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import { format } from "date-fns";
 
 export default function OrderManagement() {
-  // todo: remove mock functionality - mock data
-  const [orders] = useState([
-    {
-      id: "ORD-001",
-      customer: "John Doe",
-      email: "john@example.com",
-      date: "2024-01-15",
-      items: 2,
-      total: 299.99,
-      status: "Delivered",
+  const { isAuthenticated, isAdmin, isLoading: authLoading } = useAuth();
+  const { toast } = useToast();
+  const [selectedOrder, setSelectedOrder] = useState<any>(null);
+  const [statusFilter, setStatusFilter] = useState("all");
+
+  const { data: orders, isLoading: ordersLoading } = useQuery({
+    queryKey: ["/api/orders"],
+    enabled: isAuthenticated && isAdmin,
+  });
+
+  const updateStatusMutation = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: string }) => {
+      const res = await apiRequest("PATCH", `/api/orders/${id}/status`, { status });
+      return res.json();
     },
-    {
-      id: "ORD-002",
-      customer: "Jane Smith",
-      email: "jane@example.com",
-      date: "2024-01-20",
-      items: 1,
-      total: 1299.99,
-      status: "Shipped",
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      toast({
+        title: "Success",
+        description: "Order status updated successfully",
+      });
+      setSelectedOrder(null);
     },
-    {
-      id: "ORD-003",
-      customer: "Bob Johnson",
-      email: "bob@example.com",
-      date: "2024-01-22",
-      items: 3,
-      total: 499.99,
-      status: "Processing",
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
     },
-    {
-      id: "ORD-004",
-      customer: "Alice Brown",
-      email: "alice@example.com",
-      date: "2024-01-25",
-      items: 1,
-      total: 199.99,
-      status: "Pending",
-    },
-    {
-      id: "ORD-005",
-      customer: "Charlie Davis",
-      email: "charlie@example.com",
-      date: "2024-01-26",
-      items: 2,
-      total: 599.98,
-      status: "Cancelled",
-    },
-  ]);
+  });
+
+  if (authLoading) {
+    return (
+      <AdminLayout>
+        <div className="space-y-6">
+          <Skeleton className="h-12 w-64" />
+          <Skeleton className="h-32" />
+          <Skeleton className="h-96" />
+        </div>
+      </AdminLayout>
+    );
+  }
+
+  if (!isAuthenticated || !isAdmin) {
+    return <Redirect to="/login" />;
+  }
+
+  const filteredOrders = orders?.filter((order: any) => {
+    if (statusFilter === "all") return true;
+    return order.status.toLowerCase() === statusFilter.toLowerCase();
+  }) || [];
 
   const getStatusColor = (status: string) => {
-    switch (status) {
-      case "Delivered":
+    switch (status.toLowerCase()) {
+      case "delivered":
         return "bg-green-500/10 text-green-500 border-green-500/20";
-      case "Shipped":
+      case "shipped":
         return "bg-blue-500/10 text-blue-500 border-blue-500/20";
-      case "Processing":
+      case "processing":
         return "bg-yellow-500/10 text-yellow-500 border-yellow-500/20";
-      case "Pending":
+      case "pending":
         return "bg-orange-500/10 text-orange-500 border-orange-500/20";
-      case "Cancelled":
+      case "cancelled":
         return "bg-red-500/10 text-red-500 border-red-500/20";
       default:
         return "";
@@ -113,7 +130,7 @@ export default function OrderManagement() {
                 />
               </div>
             </div>
-            <Select defaultValue="all">
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="w-[180px]" data-testid="select-status-filter">
                 <SelectValue placeholder="Filter by status" />
               </SelectTrigger>
@@ -136,64 +153,141 @@ export default function OrderManagement() {
         {/* Orders Table */}
         <Card>
           <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Order ID</TableHead>
-                  <TableHead>Customer</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Items</TableHead>
-                  <TableHead>Total</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {orders.map((order) => (
-                  <TableRow key={order.id}>
-                    <TableCell className="font-medium" data-testid={`cell-order-id-${order.id}`}>
-                      {order.id}
-                    </TableCell>
-                    <TableCell>
-                      <div>
-                        <div className="font-medium">{order.customer}</div>
-                        <div className="text-sm text-muted-foreground">
-                          {order.email}
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell data-testid={`cell-order-date-${order.id}`}>
-                      {order.date}
-                    </TableCell>
-                    <TableCell data-testid={`cell-order-items-${order.id}`}>
-                      {order.items}
-                    </TableCell>
-                    <TableCell className="font-semibold" data-testid={`cell-order-total-${order.id}`}>
-                      ${order.total.toFixed(2)}
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        className={getStatusColor(order.status)}
-                        data-testid={`badge-order-status-${order.id}`}
-                      >
-                        {order.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        data-testid={`button-view-order-${order.id}`}
-                      >
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
+            {ordersLoading ? (
+              <div className="p-6 space-y-4">
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <Skeleton key={i} className="h-16" />
                 ))}
-              </TableBody>
-            </Table>
+              </div>
+            ) : filteredOrders.length === 0 ? (
+              <div className="p-12 text-center text-muted-foreground">
+                <p>No orders found</p>
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Order ID</TableHead>
+                    <TableHead>Customer</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Total</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredOrders.map((order: any) => (
+                    <TableRow key={order.id}>
+                      <TableCell className="font-medium" data-testid={`cell-order-id-${order.id}`}>
+                        {order.id}
+                      </TableCell>
+                      <TableCell>
+                        <div>
+                          <div className="font-medium">{order.customerName}</div>
+                          <div className="text-sm text-muted-foreground">
+                            {order.customerEmail}
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell data-testid={`cell-order-date-${order.id}`}>
+                        {format(new Date(order.createdAt), 'MMM dd, yyyy')}
+                      </TableCell>
+                      <TableCell className="font-semibold" data-testid={`cell-order-total-${order.id}`}>
+                        ${parseFloat(order.total).toFixed(2)}
+                      </TableCell>
+                      <TableCell>
+                        <Select
+                          value={order.status}
+                          onValueChange={(status) => updateStatusMutation.mutate({ id: order.id, status })}
+                        >
+                          <SelectTrigger className="w-[130px]">
+                            <Badge
+                              className={getStatusColor(order.status)}
+                              data-testid={`badge-order-status-${order.id}`}
+                            >
+                              {order.status}
+                            </Badge>
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="pending">Pending</SelectItem>
+                            <SelectItem value="processing">Processing</SelectItem>
+                            <SelectItem value="shipped">Shipped</SelectItem>
+                            <SelectItem value="delivered">Delivered</SelectItem>
+                            <SelectItem value="cancelled">Cancelled</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setSelectedOrder(order)}
+                          data-testid={`button-view-order-${order.id}`}
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
           </div>
         </Card>
+
+        {/* Order Details Dialog */}
+        <Dialog open={!!selectedOrder} onOpenChange={() => setSelectedOrder(null)}>
+          <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Order Details - {selectedOrder?.id}</DialogTitle>
+            </DialogHeader>
+            {selectedOrder && (
+              <div className="space-y-6">
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <h3 className="font-semibold mb-2">Customer Information</h3>
+                    <div className="space-y-1 text-sm">
+                      <p>{selectedOrder.customerName}</p>
+                      <p className="text-muted-foreground">{selectedOrder.customerEmail}</p>
+                      {selectedOrder.customerPhone && (
+                        <p className="text-muted-foreground">{selectedOrder.customerPhone}</p>
+                      )}
+                    </div>
+                  </div>
+                  <div>
+                    <h3 className="font-semibold mb-2">Shipping Address</h3>
+                    <div className="space-y-1 text-sm text-muted-foreground">
+                      <p>{selectedOrder.shippingAddress}</p>
+                      <p>{selectedOrder.shippingCity}, {selectedOrder.shippingState} {selectedOrder.shippingZip}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="font-semibold mb-2">Order Summary</h3>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Subtotal:</span>
+                      <span>${parseFloat(selectedOrder.subtotal).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Shipping:</span>
+                      <span>${parseFloat(selectedOrder.shipping).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Tax:</span>
+                      <span>${parseFloat(selectedOrder.tax).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between font-semibold text-base pt-2 border-t">
+                      <span>Total:</span>
+                      <span>${parseFloat(selectedOrder.total).toFixed(2)}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
     </AdminLayout>
   );

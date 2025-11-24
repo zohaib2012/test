@@ -2,80 +2,24 @@ import { Button } from "@/components/ui/button";
 import { ProductCard } from "@/components/ProductCard";
 import { CategoryCard } from "@/components/CategoryCard";
 import { StorefrontHeader } from "@/components/StorefrontHeader";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Truck, Shield, Headphones, ArrowRight } from "lucide-react";
 import { Link } from "wouter";
+import { useQuery } from "@tanstack/react-query";
+import type { Product, Category } from "@shared/schema";
 import heroImage from "@assets/generated_images/luxury_watch_hero_image.png";
-import headphonesImage from "@assets/generated_images/premium_headphones_product_image.png";
-import laptopImage from "@assets/generated_images/gaming_laptop_product_image.png";
-import bagImage from "@assets/generated_images/leather_bag_product_image.png";
-import phoneImage from "@assets/generated_images/smartphone_product_image.png";
 import sneakersImage from "@assets/generated_images/sneakers_product_image.png";
 
 export default function HomePage() {
-  // todo: remove mock functionality - mock data
-  const trendingProducts = [
-    {
-      id: "1",
-      name: "Premium Wireless Headphones",
-      price: 299.99,
-      originalPrice: 399.99,
-      image: headphonesImage,
-      rating: 4.5,
-      reviewCount: 128,
-      onSale: true,
-    },
-    {
-      id: "2",
-      name: "Gaming Laptop Pro",
-      price: 1299.99,
-      image: laptopImage,
-      rating: 4.8,
-      reviewCount: 89,
-    },
-    {
-      id: "3",
-      name: "Luxury Leather Bag",
-      price: 199.99,
-      image: bagImage,
-      rating: 4.6,
-      reviewCount: 156,
-    },
-    {
-      id: "4",
-      name: "Smartphone X Pro",
-      price: 999.99,
-      image: phoneImage,
-      rating: 4.9,
-      reviewCount: 234,
-    },
-  ];
+  const { data: products, isLoading: productsLoading } = useQuery<Product[]>({
+    queryKey: ["/api/products"],
+  });
 
-  const categories = [
-    {
-      id: "electronics",
-      name: "Electronics",
-      image: laptopImage,
-      productCount: 245,
-    },
-    {
-      id: "fashion",
-      name: "Fashion",
-      image: bagImage,
-      productCount: 189,
-    },
-    {
-      id: "accessories",
-      name: "Accessories",
-      image: headphonesImage,
-      productCount: 156,
-    },
-    {
-      id: "footwear",
-      name: "Footwear",
-      image: sneakersImage,
-      productCount: 98,
-    },
-  ];
+  const { data: categories, isLoading: categoriesLoading } = useQuery<Category[]>({
+    queryKey: ["/api/categories"],
+  });
+
+  const trendingProducts = products?.slice(0, 4) || [];
 
   return (
     <div className="min-h-screen bg-background">
@@ -130,9 +74,21 @@ export default function HomePage() {
             Shop by Category
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {categories.map((category) => (
-              <CategoryCard key={category.id} {...category} />
-            ))}
+            {categoriesLoading ? (
+              Array.from({ length: 4 }).map((_, i) => (
+                <Skeleton key={i} className="h-48 w-full rounded-lg" />
+              ))
+            ) : (
+              categories?.map((category) => (
+                <CategoryCard
+                  key={category.id}
+                  id={category.id}
+                  name={category.name}
+                  image={category.id}
+                  productCount={category.productCount}
+                />
+              ))
+            )}
           </div>
         </div>
       </section>
@@ -152,9 +108,29 @@ export default function HomePage() {
             </Link>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {trendingProducts.map((product) => (
-              <ProductCard key={product.id} {...product} />
-            ))}
+            {productsLoading ? (
+              Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="space-y-3">
+                  <Skeleton className="h-64 w-full rounded-lg" />
+                  <Skeleton className="h-4 w-3/4" />
+                  <Skeleton className="h-4 w-1/2" />
+                </div>
+              ))
+            ) : (
+              trendingProducts.map((product) => (
+                <ProductCard
+                  key={product.id}
+                  id={product.id}
+                  name={product.name}
+                  price={parseFloat(product.price)}
+                  originalPrice={product.originalPrice ? parseFloat(product.originalPrice) : undefined}
+                  image={product.image}
+                  rating={parseFloat(product.rating)}
+                  reviewCount={product.reviewCount}
+                  onSale={!!product.originalPrice}
+                />
+              ))
+            )}
           </div>
         </div>
       </section>

@@ -1,13 +1,23 @@
-import { ShoppingCart, User, Search, Menu } from "lucide-react";
+import { ShoppingCart, User, Search, Menu, LogOut, LayoutDashboard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ThemeToggle } from "./ThemeToggle";
 import { Link } from "wouter";
 import { Badge } from "@/components/ui/badge";
-import { useState } from "react";
+import { useAuth } from "@/lib/auth";
+import { useCart } from "@/lib/cart";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export function StorefrontHeader() {
-  const [cartCount] = useState(3); // todo: remove mock functionality
+  const { isAuthenticated, isAdmin, user, logout } = useAuth();
+  const { totalItems } = useCart();
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur">
@@ -60,24 +70,64 @@ export function StorefrontHeader() {
           {/* Actions */}
           <div className="flex items-center gap-2">
             <ThemeToggle />
-            <Link href="/account" data-testid="link-account">
-              <Button variant="ghost" size="icon">
-                <User className="h-5 w-5" />
-              </Button>
-            </Link>
+
+            {/* Cart */}
             <Link href="/cart" data-testid="link-cart">
               <Button variant="ghost" size="icon" className="relative">
                 <ShoppingCart className="h-5 w-5" />
-                {cartCount > 0 && (
+                {totalItems > 0 && (
                   <Badge
                     className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs"
                     data-testid="badge-cart-count"
                   >
-                    {cartCount}
+                    {totalItems}
                   </Badge>
                 )}
               </Button>
             </Link>
+
+            {/* User Menu */}
+            {isAuthenticated ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" data-testid="button-user-menu">
+                    <User className="h-5 w-5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuLabel>
+                    {user?.firstName} {user?.lastName}
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <Link href="/account">
+                    <DropdownMenuItem data-testid="link-account">
+                      <User className="mr-2 h-4 w-4" />
+                      My Account
+                    </DropdownMenuItem>
+                  </Link>
+                  {isAdmin && (
+                    <Link href="/admin">
+                      <DropdownMenuItem data-testid="link-admin">
+                        <LayoutDashboard className="mr-2 h-4 w-4" />
+                        Admin Dashboard
+                      </DropdownMenuItem>
+                    </Link>
+                  )}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={logout} data-testid="button-logout">
+                    <LogOut className="mr-2 h-4 w-4" />
+                    Logout
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <Link href="/login">
+                <Button variant="ghost" size="sm" data-testid="button-login">
+                  Login
+                </Button>
+              </Link>
+            )}
+
             <Button variant="ghost" size="icon" className="md:hidden">
               <Menu className="h-5 w-5" />
             </Button>

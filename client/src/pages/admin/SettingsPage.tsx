@@ -3,14 +3,38 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useTheme } from "@/components/ThemeProvider";
+import { useAuth } from "@/lib/auth";
+import { Redirect } from "wouter";
 
 export default function SettingsPage() {
   const { theme, toggleTheme } = useTheme();
+  const { user, isAuthenticated, isAdmin, isLoading: authLoading } = useAuth();
+
+  if (authLoading) {
+    return (
+      <AdminLayout>
+        <div className="space-y-6">
+          <Skeleton className="h-12 w-64" />
+          <Skeleton className="h-96" />
+        </div>
+      </AdminLayout>
+    );
+  }
+
+  if (!isAuthenticated || !isAdmin) {
+    return <Redirect to="/login" />;
+  }
+
+  const getInitials = () => {
+    if (!user) return "AD";
+    return `${user.firstName[0]}${user.lastName[0]}`.toUpperCase();
+  };
 
   return (
     <AdminLayout>
@@ -43,7 +67,7 @@ export default function SettingsPage() {
               <div className="space-y-6">
                 <div className="flex items-center gap-6">
                   <Avatar className="h-24 w-24">
-                    <AvatarFallback className="text-2xl">AD</AvatarFallback>
+                    <AvatarFallback className="text-2xl">{getInitials()}</AvatarFallback>
                   </Avatar>
                   <div>
                     <Button variant="outline" data-testid="button-change-avatar">
@@ -57,7 +81,7 @@ export default function SettingsPage() {
                     <Label htmlFor="adminFirstName">First Name</Label>
                     <Input
                       id="adminFirstName"
-                      defaultValue="Admin"
+                      defaultValue={user?.firstName || ""}
                       data-testid="input-admin-first-name"
                     />
                   </div>
@@ -65,7 +89,7 @@ export default function SettingsPage() {
                     <Label htmlFor="adminLastName">Last Name</Label>
                     <Input
                       id="adminLastName"
-                      defaultValue="User"
+                      defaultValue={user?.lastName || ""}
                       data-testid="input-admin-last-name"
                     />
                   </div>
@@ -76,7 +100,7 @@ export default function SettingsPage() {
                   <Input
                     id="adminEmail"
                     type="email"
-                    defaultValue="admin@luxe.com"
+                    defaultValue={user?.email || ""}
                     data-testid="input-admin-email"
                   />
                 </div>

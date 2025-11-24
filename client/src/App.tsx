@@ -4,6 +4,8 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/ThemeProvider";
+import { AuthProvider } from "@/lib/auth";
+import { CartProvider } from "@/lib/cart";
 import NotFound from "@/pages/not-found";
 
 // Storefront Pages
@@ -13,6 +15,8 @@ import ProductDetailPage from "@/pages/ProductDetailPage";
 import CartPage from "@/pages/CartPage";
 import CheckoutPage from "@/pages/CheckoutPage";
 import AccountPage from "@/pages/AccountPage";
+import LoginPage from "@/pages/LoginPage";
+import RegisterPage from "@/pages/RegisterPage";
 
 // Admin Pages
 import DashboardHome from "@/pages/admin/DashboardHome";
@@ -25,6 +29,10 @@ import SettingsPage from "@/pages/admin/SettingsPage";
 function Router() {
   return (
     <Switch>
+      {/* Auth Routes */}
+      <Route path="/login" component={LoginPage} />
+      <Route path="/register" component={RegisterPage} />
+
       {/* Storefront Routes */}
       <Route path="/" component={HomePage} />
       <Route path="/shop" component={ShopPage} />
@@ -50,12 +58,16 @@ function Router() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <ThemeProvider>
-        <TooltipProvider>
-          <Toaster />
-          <Router />
-        </TooltipProvider>
-      </ThemeProvider>
+      <AuthProvider>
+        <CartProvider>
+          <ThemeProvider>
+            <TooltipProvider>
+              <Toaster />
+              <Router />
+            </TooltipProvider>
+          </ThemeProvider>
+        </CartProvider>
+      </AuthProvider>
     </QueryClientProvider>
   );
 }

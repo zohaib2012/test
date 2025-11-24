@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { StorefrontHeader } from "@/components/StorefrontHeader";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -7,45 +8,50 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Package, MapPin, CreditCard, User } from "lucide-react";
+import { useAuth } from "@/lib/auth";
+import { useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
+
+type Order = {
+  id: string;
+  userId: string;
+  status: string;
+  total: string;
+  createdAt: string;
+};
 
 export default function AccountPage() {
-  // todo: remove mock functionality - mock data
-  const orders = [
-    {
-      id: "ORD-001",
-      date: "2024-01-15",
-      total: 1299.99,
-      status: "Delivered",
-      items: 2,
-    },
-    {
-      id: "ORD-002",
-      date: "2024-01-20",
-      total: 499.98,
-      status: "Shipped",
-      items: 3,
-    },
-    {
-      id: "ORD-003",
-      date: "2024-01-25",
-      total: 199.99,
-      status: "Processing",
-      items: 1,
-    },
-  ];
+  const [, navigate] = useLocation();
+  const { isAuthenticated, user, isLoading: authLoading } = useAuth();
+
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) {
+      navigate("/login");
+    }
+  }, [isAuthenticated, authLoading, navigate]);
+
+  const { data: orders = [], isLoading } = useQuery<Order[]>({
+    queryKey: ["/api/orders"],
+    enabled: isAuthenticated,
+  });
 
   const getStatusColor = (status: string) => {
-    switch (status) {
-      case "Delivered":
+    switch (status.toLowerCase()) {
+      case "delivered":
         return "bg-green-500/10 text-green-500 border-green-500/20";
-      case "Shipped":
+      case "shipped":
         return "bg-blue-500/10 text-blue-500 border-blue-500/20";
-      case "Processing":
+      case "processing":
+      case "pending":
         return "bg-yellow-500/10 text-yellow-500 border-yellow-500/20";
       default:
         return "";
     }
   };
+
+  if (authLoading) {
+    return null;
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -57,12 +63,14 @@ export default function AccountPage() {
           <Card className="lg:col-span-1 p-6 h-fit">
             <div className="flex flex-col items-center mb-6">
               <Avatar className="h-24 w-24 mb-4">
-                <AvatarFallback className="text-2xl">JD</AvatarFallback>
+                <AvatarFallback className="text-2xl">
+                  {user?.firstName?.[0]}{user?.lastName?.[0]}
+                </AvatarFallback>
               </Avatar>
               <h2 className="text-xl font-bold" data-testid="text-user-name">
-                John Doe
+                {user?.firstName} {user?.lastName}
               </h2>
-              <p className="text-sm text-muted-foreground">john@example.com</p>
+              <p className="text-sm text-muted-foreground">{user?.email}</p>
             </div>
             <nav className="space-y-2">
               <Button
@@ -115,51 +123,61 @@ export default function AccountPage() {
               <TabsContent value="orders" className="mt-6">
                 <Card className="p-6">
                   <h2 className="text-2xl font-bold mb-6">Order History</h2>
-                  <div className="space-y-4">
-                    {orders.map((order) => (
-                      <Card
-                        key={order.id}
-                        className="p-6 hover-elevate active-elevate-2 transition-all"
-                      >
-                        <div className="flex flex-wrap items-center justify-between gap-4">
-                          <div>
-                            <div className="flex items-center gap-3 mb-2">
-                              <h3
-                                className="font-semibold text-lg"
-                                data-testid={`text-order-id-${order.id}`}
-                              >
-                                {order.id}
-                              </h3>
-                              <Badge
-                                className={getStatusColor(order.status)}
-                                data-testid={`badge-status-${order.id}`}
-                              >
-                                {order.status}
-                              </Badge>
+                  {isLoading ? (
+                    <div className="text-center py-12 text-muted-foreground">
+                      Loading orders...
+                    </div>
+                  ) : orders.length === 0 ? (
+                    <div className="text-center py-12 text-muted-foreground">
+                      No orders yet
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {orders.map((order) => (
+                        <Card
+                          key={order.id}
+                          className="p-6 hover-elevate active-elevate-2 transition-all"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-4">
+                            <div>
+                              <div className="flex items-center gap-3 mb-2">
+                                <h3
+                                  className="font-semibold text-lg"
+                                  data-testid={`text-order-id-${order.id}`}
+                                >
+                                  Order #{order.id}
+                                </h3>
+                                <Badge
+                                  className={getStatusColor(order.status)}
+                                  data-testid={`badge-status-${order.id}`}
+                                >
+                                  {order.status}
+                                </Badge>
+                              </div>
+                              <p className="text-sm text-muted-foreground">
+                                Placed on {new Date(order.createdAt).toLocaleDateString()}
+                              </p>
                             </div>
-                            <p className="text-sm text-muted-foreground">
-                              Placed on {order.date} · {order.items} items
-                            </p>
+                            <div className="text-right">
+                              <p
+                                className="text-xl font-bold mb-2"
+                                data-testid={`text-order-total-${order.id}`}
+                              >
+                                ${parseFloat(order.total).toFixed(2)}
+                              </p>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                data-testid={`button-view-order-${order.id}`}
+                              >
+                                View Details
+                              </Button>
+                            </div>
                           </div>
-                          <div className="text-right">
-                            <p
-                              className="text-xl font-bold mb-2"
-                              data-testid={`text-order-total-${order.id}`}
-                            >
-                              ${order.total.toFixed(2)}
-                            </p>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              data-testid={`button-view-order-${order.id}`}
-                            >
-                              View Details
-                            </Button>
-                          </div>
-                        </div>
-                      </Card>
-                    ))}
-                  </div>
+                        </Card>
+                      ))}
+                    </div>
+                  )}
                 </Card>
               </TabsContent>
 

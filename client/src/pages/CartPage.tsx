@@ -1,58 +1,13 @@
-import { useState } from "react";
 import { StorefrontHeader } from "@/components/StorefrontHeader";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Minus, Plus, Trash2, ArrowRight } from "lucide-react";
 import { Link } from "wouter";
-import headphonesImage from "@assets/generated_images/premium_headphones_product_image.png";
-import laptopImage from "@assets/generated_images/gaming_laptop_product_image.png";
-import bagImage from "@assets/generated_images/leather_bag_product_image.png";
+import { useCart } from "@/lib/cart";
 
 export default function CartPage() {
-  // todo: remove mock functionality - mock data
-  const [cartItems, setCartItems] = useState([
-    {
-      id: "1",
-      name: "Premium Wireless Headphones",
-      price: 299.99,
-      quantity: 1,
-      image: headphonesImage,
-    },
-    {
-      id: "2",
-      name: "Gaming Laptop Pro",
-      price: 1299.99,
-      quantity: 1,
-      image: laptopImage,
-    },
-    {
-      id: "3",
-      name: "Luxury Leather Bag",
-      price: 199.99,
-      quantity: 2,
-      image: bagImage,
-    },
-  ]);
+  const { items: cartItems, updateQuantity, removeItem, subtotal } = useCart();
 
-  const updateQuantity = (id: string, delta: number) => {
-    setCartItems((items) =>
-      items.map((item) =>
-        item.id === id
-          ? { ...item, quantity: Math.max(1, item.quantity + delta) }
-          : item
-      )
-    );
-  };
-
-  const removeItem = (id: string) => {
-    setCartItems((items) => items.filter((item) => item.id !== id));
-    console.log("Remove item:", id); // todo: remove mock functionality
-  };
-
-  const subtotal = cartItems.reduce(
-    (sum, item) => sum + item.price * item.quantity,
-    0
-  );
   const shipping = subtotal > 100 ? 0 : 10;
   const tax = subtotal * 0.08;
   const total = subtotal + shipping + tax;
@@ -110,7 +65,7 @@ export default function CartPage() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() => updateQuantity(item.id, -1)}
+                            onClick={() => updateQuantity(item.id, Math.max(1, item.quantity - 1))}
                             data-testid={`button-decrease-${item.id}`}
                           >
                             <Minus className="h-4 w-4" />
@@ -124,7 +79,7 @@ export default function CartPage() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() => updateQuantity(item.id, 1)}
+                            onClick={() => updateQuantity(item.id, item.quantity + 1)}
                             data-testid={`button-increase-${item.id}`}
                           >
                             <Plus className="h-4 w-4" />

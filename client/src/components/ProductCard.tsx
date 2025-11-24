@@ -3,12 +3,14 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Link } from "wouter";
+import { useCart } from "@/lib/cart";
+import { useToast } from "@/hooks/use-toast";
 
 interface ProductCardProps {
   id: string;
   name: string;
-  price: number;
-  originalPrice?: number;
+  price: number | string;
+  originalPrice?: number | string;
   image: string;
   rating: number;
   reviewCount: number;
@@ -25,9 +27,21 @@ export function ProductCard({
   reviewCount,
   onSale,
 }: ProductCardProps) {
+  const { addItem } = useCart();
+  const { toast } = useToast();
+
   const handleAddToCart = (e: React.MouseEvent) => {
     e.preventDefault();
-    console.log("Add to cart:", id); // todo: remove mock functionality
+    addItem({
+      id,
+      name,
+      price: Number(price),
+      image,
+    });
+    toast({
+      title: "Added to cart",
+      description: `${name} has been added to your cart.`,
+    });
   };
 
   return (
@@ -88,11 +102,11 @@ export function ProductCard({
               className="text-xl font-bold"
               data-testid={`text-price-${id}`}
             >
-              ${price.toFixed(2)}
+              ${Number(price).toFixed(2)}
             </span>
             {originalPrice && (
               <span className="text-sm text-muted-foreground line-through">
-                ${originalPrice.toFixed(2)}
+                ${Number(originalPrice).toFixed(2)}
               </span>
             )}
           </div>

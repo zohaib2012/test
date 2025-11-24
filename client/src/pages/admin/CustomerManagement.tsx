@@ -3,6 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Table,
@@ -13,54 +14,54 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Search, Eye } from "lucide-react";
+import { useAuth } from "@/lib/auth";
+import { Redirect } from "wouter";
+import { useQuery } from "@tanstack/react-query";
+import { format } from "date-fns";
 
 export default function CustomerManagement() {
-  // todo: remove mock functionality - mock data
-  const customers = [
-    {
-      id: "1",
-      name: "John Doe",
-      email: "john@example.com",
-      orders: 12,
-      totalSpent: 3599.88,
-      joined: "2023-06-15",
-      status: "Active",
-    },
-    {
-      id: "2",
-      name: "Jane Smith",
-      email: "jane@example.com",
-      orders: 8,
-      totalSpent: 2499.92,
-      joined: "2023-08-22",
-      status: "Active",
-    },
-    {
-      id: "3",
-      name: "Bob Johnson",
-      email: "bob@example.com",
-      orders: 5,
-      totalSpent: 1299.95,
-      joined: "2023-09-10",
-      status: "Active",
-    },
-    {
-      id: "4",
-      name: "Alice Brown",
-      email: "alice@example.com",
-      orders: 15,
-      totalSpent: 4799.85,
-      joined: "2023-05-03",
-      status: "VIP",
-    },
-  ];
+  const { isAuthenticated, isAdmin, isLoading: authLoading } = useAuth();
 
-  const getInitials = (name: string) => {
-    return name
-      .split(" ")
-      .map((n) => n[0])
-      .join("")
-      .toUpperCase();
+  const { data: users, isLoading: usersLoading } = useQuery({
+    queryKey: ["/api/users"],
+    enabled: isAuthenticated && isAdmin,
+  });
+
+  const { data: orders } = useQuery({
+    queryKey: ["/api/orders"],
+    enabled: isAuthenticated && isAdmin,
+  });
+
+  if (authLoading) {
+    return (
+      <AdminLayout>
+        <div className="space-y-6">
+          <Skeleton className="h-12 w-64" />
+          <Skeleton className="h-32" />
+          <Skeleton className="h-96" />
+        </div>
+      </AdminLayout>
+    );
+  }
+
+  if (!isAuthenticated || !isAdmin) {
+    return <Redirect to="/login" />;
+  }
+
+  const customers = users?.filter((u: any) => u.role === 'user') || [];
+
+  const getCustomerStats = (userId: string) => {
+    const customerOrders = orders?.filter((o: any) => o.userId === userId) || [];
+    const totalSpent = customerOrders.reduce((sum: number, order: any) => 
+      sum + parseFloat(order.total || 0), 0);
+    return {
+      orderCount: customerOrders.length,
+      totalSpent,
+    };
+  };
+
+  const getInitials = (firstName: string, lastName: string) => {
+    return `${firstName[0]}${lastName[0]}`.toUpperCase();
   };
 
   return (
@@ -90,66 +91,82 @@ export default function CustomerManagement() {
         {/* Customers Table */}
         <Card>
           <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Customer</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Orders</TableHead>
-                  <TableHead>Total Spent</TableHead>
-                  <TableHead>Joined</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {customers.map((customer) => (
-                  <TableRow key={customer.id}>
-                    <TableCell>
-                      <div className="flex items-center gap-3">
-                        <Avatar>
-                          <AvatarFallback>
-                            {getInitials(customer.name)}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="font-medium" data-testid={`text-customer-name-${customer.id}`}>
-                          {customer.name}
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground" data-testid={`text-customer-email-${customer.id}`}>
-                      {customer.email}
-                    </TableCell>
-                    <TableCell data-testid={`text-customer-orders-${customer.id}`}>
-                      {customer.orders}
-                    </TableCell>
-                    <TableCell className="font-semibold" data-testid={`text-customer-spent-${customer.id}`}>
-                      ${customer.totalSpent.toFixed(2)}
-                    </TableCell>
-                    <TableCell data-testid={`text-customer-joined-${customer.id}`}>
-                      {customer.joined}
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={customer.status === "VIP" ? "default" : "secondary"}
-                        data-testid={`badge-customer-status-${customer.id}`}
-                      >
-                        {customer.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        data-testid={`button-view-customer-${customer.id}`}
-                      >
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
+            {usersLoading ? (
+              <div className="p-6 space-y-4">
+                {[1, 2, 3, 4].map((i) => (
+                  <Skeleton key={i} className="h-16" />
                 ))}
-              </TableBody>
-            </Table>
+              </div>
+            ) : customers.length === 0 ? (
+              <div className="p-12 text-center text-muted-foreground">
+                <p>No customers found</p>
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Customer</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Orders</TableHead>
+                    <TableHead>Total Spent</TableHead>
+                    <TableHead>Joined</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {customers.map((customer: any) => {
+                    const stats = getCustomerStats(customer.id);
+                    const isVIP = stats.totalSpent > 1000;
+                    return (
+                      <TableRow key={customer.id}>
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            <Avatar>
+                              <AvatarFallback>
+                                {getInitials(customer.firstName, customer.lastName)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="font-medium" data-testid={`text-customer-name-${customer.id}`}>
+                              {customer.firstName} {customer.lastName}
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground" data-testid={`text-customer-email-${customer.id}`}>
+                          {customer.email}
+                        </TableCell>
+                        <TableCell data-testid={`text-customer-orders-${customer.id}`}>
+                          {stats.orderCount}
+                        </TableCell>
+                        <TableCell className="font-semibold" data-testid={`text-customer-spent-${customer.id}`}>
+                          ${stats.totalSpent.toFixed(2)}
+                        </TableCell>
+                        <TableCell data-testid={`text-customer-joined-${customer.id}`}>
+                          {format(new Date(customer.createdAt), 'MMM dd, yyyy')}
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={isVIP ? "default" : "secondary"}
+                            data-testid={`badge-customer-status-${customer.id}`}
+                          >
+                            {isVIP ? "VIP" : "Active"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            data-testid={`button-view-customer-${customer.id}`}
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            )}
           </div>
         </Card>
       </div>

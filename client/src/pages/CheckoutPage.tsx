@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { StorefrontHeader } from "@/components/StorefrontHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,18 +7,120 @@ import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Check } from "lucide-react";
+import { useAuth } from "@/lib/auth";
+import { useCart } from "@/lib/cart";
+import { useLocation } from "wouter";
+import { useMutation } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 export default function CheckoutPage() {
+  const [, navigate] = useLocation();
+  const { isAuthenticated, user, isLoading: authLoading } = useAuth();
+  const { items, subtotal, clearCart } = useCart();
+  const { toast } = useToast();
   const [currentStep, setCurrentStep] = useState(1);
   const steps = ["Shipping", "Payment", "Review"];
 
-  // todo: remove mock functionality - mock order data
-  const orderSummary = {
-    subtotal: 1799.97,
-    shipping: 0,
-    tax: 143.99,
-    total: 1943.96,
+  const [shippingInfo, setShippingInfo] = useState({
+    firstName: "",
+    lastName: "",
+    email: "",
+    phone: "",
+    address: "",
+    city: "",
+    state: "",
+    zip: "",
+  });
+
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) {
+      navigate("/login");
+    }
+  }, [isAuthenticated, authLoading, navigate]);
+
+  useEffect(() => {
+    if (user) {
+      setShippingInfo((prev) => ({
+        ...prev,
+        firstName: user.firstName || "",
+        lastName: user.lastName || "",
+        email: user.email || "",
+      }));
+    }
+  }, [user]);
+
+  const shipping = subtotal > 100 ? 0 : 10;
+  const tax = subtotal * 0.08;
+  const total = subtotal + shipping + tax;
+
+  const createOrderMutation = useMutation({
+    mutationFn: async () => {
+      const payload = {
+        order: {
+          customerName: `${shippingInfo.firstName} ${shippingInfo.lastName}`,
+          customerEmail: shippingInfo.email,
+          customerPhone: shippingInfo.phone,
+          shippingAddress: shippingInfo.address,
+          shippingCity: shippingInfo.city,
+          shippingState: shippingInfo.state,
+          shippingZip: shippingInfo.zip,
+          subtotal: subtotal.toString(),
+          shipping: shipping.toString(),
+          tax: tax.toString(),
+          total: total.toString(),
+        },
+        items: items.map((item) => ({
+          productId: item.id,
+          productName: item.name,
+          productImage: item.image,
+          quantity: item.quantity,
+          price: item.price.toString(),
+        })),
+      };
+
+      const response = await apiRequest("POST", "/api/orders", payload);
+      return response.json();
+    },
+    onSuccess: () => {
+      clearCart();
+      toast({
+        title: "Order placed successfully!",
+        description: "Your order has been confirmed. Check your email for details.",
+      });
+      navigate("/account");
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Order failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handlePlaceOrder = () => {
+    createOrderMutation.mutate();
   };
+
+  if (authLoading) {
+    return null;
+  }
+
+  if (items.length === 0) {
+    return (
+      <div className="min-h-screen bg-background">
+        <StorefrontHeader />
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+          <Card className="p-12 text-center">
+            <p className="text-xl text-muted-foreground mb-6">
+              Your cart is empty
+            </p>
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -76,6 +178,8 @@ export default function CheckoutPage() {
                       <Input
                         id="firstName"
                         placeholder="John"
+                        value={shippingInfo.firstName}
+                        onChange={(e) => setShippingInfo({ ...shippingInfo, firstName: e.target.value })}
                         data-testid="input-first-name"
                       />
                     </div>
@@ -84,6 +188,8 @@ export default function CheckoutPage() {
                       <Input
                         id="lastName"
                         placeholder="Doe"
+                        value={shippingInfo.lastName}
+                        onChange={(e) => setShippingInfo({ ...shippingInfo, lastName: e.target.value })}
                         data-testid="input-last-name"
                       />
                     </div>
@@ -94,6 +200,8 @@ export default function CheckoutPage() {
                       id="email"
                       type="email"
                       placeholder="john@example.com"
+                      value={shippingInfo.email}
+                      onChange={(e) => setShippingInfo({ ...shippingInfo, email: e.target.value })}
                       data-testid="input-email"
                     />
                   </div>
@@ -103,6 +211,8 @@ export default function CheckoutPage() {
                       id="phone"
                       type="tel"
                       placeholder="+1 (555) 000-0000"
+                      value={shippingInfo.phone}
+                      onChange={(e) => setShippingInfo({ ...shippingInfo, phone: e.target.value })}
                       data-testid="input-phone"
                     />
                   </div>
@@ -111,6 +221,8 @@ export default function CheckoutPage() {
                     <Input
                       id="address"
                       placeholder="123 Main St"
+                      value={shippingInfo.address}
+                      onChange={(e) => setShippingInfo({ ...shippingInfo, address: e.target.value })}
                       data-testid="input-address"
                     />
                   </div>
@@ -120,6 +232,8 @@ export default function CheckoutPage() {
                       <Input
                         id="city"
                         placeholder="New York"
+                        value={shippingInfo.city}
+                        onChange={(e) => setShippingInfo({ ...shippingInfo, city: e.target.value })}
                         data-testid="input-city"
                       />
                     </div>
@@ -128,6 +242,8 @@ export default function CheckoutPage() {
                       <Input
                         id="state"
                         placeholder="NY"
+                        value={shippingInfo.state}
+                        onChange={(e) => setShippingInfo({ ...shippingInfo, state: e.target.value })}
                         data-testid="input-state"
                       />
                     </div>
@@ -136,6 +252,8 @@ export default function CheckoutPage() {
                       <Input
                         id="zip"
                         placeholder="10001"
+                        value={shippingInfo.zip}
+                        onChange={(e) => setShippingInfo({ ...shippingInfo, zip: e.target.value })}
                         data-testid="input-zip"
                       />
                     </div>
@@ -260,7 +378,13 @@ export default function CheckoutPage() {
                   Continue
                 </Button>
               ) : (
-                <Button data-testid="button-place-order">Place Order</Button>
+                <Button 
+                  onClick={handlePlaceOrder}
+                  disabled={createOrderMutation.isPending}
+                  data-testid="button-place-order"
+                >
+                  {createOrderMutation.isPending ? "Placing Order..." : "Place Order"}
+                </Button>
               )}
             </div>
           </div>
@@ -273,27 +397,27 @@ export default function CheckoutPage() {
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Subtotal</span>
                   <span data-testid="text-summary-subtotal">
-                    ${orderSummary.subtotal.toFixed(2)}
+                    ${subtotal.toFixed(2)}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Shipping</span>
                   <span data-testid="text-summary-shipping">
-                    {orderSummary.shipping === 0
+                    {shipping === 0
                       ? "Free"
-                      : `$${orderSummary.shipping.toFixed(2)}`}
+                      : `$${shipping.toFixed(2)}`}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Tax</span>
                   <span data-testid="text-summary-tax">
-                    ${orderSummary.tax.toFixed(2)}
+                    ${tax.toFixed(2)}
                   </span>
                 </div>
                 <div className="border-t pt-3 flex justify-between text-lg font-bold">
                   <span>Total</span>
                   <span data-testid="text-summary-total">
-                    ${orderSummary.total.toFixed(2)}
+                    ${total.toFixed(2)}
                   </span>
                 </div>
               </div>
